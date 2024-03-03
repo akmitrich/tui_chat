@@ -11,7 +11,7 @@ use crate::{
 pub struct App {
     ui: Ui,
     rx: mpsc::Receiver<ControllerSignal>,
-    _async_runtime: Runtime,
+    async_runtime: Runtime,
     async_tx: mpsc::Sender<ConnectorEvent>,
 }
 
@@ -24,19 +24,19 @@ impl App {
         Self {
             ui: Ui::new(tx),
             rx,
-            _async_runtime: async_runtime,
+            async_runtime,
             async_tx,
         }
     }
 
-    pub fn go(&mut self) {
+    pub fn go(mut self) {
         self.ui.init_view();
         self.run();
     }
 }
 
 impl App {
-    fn run(&mut self) {
+    fn run(mut self) {
         loop {
             self.process_signals();
             self.ui.step_next();
@@ -44,6 +44,8 @@ impl App {
                 break;
             }
         }
+        self.async_runtime
+            .shutdown_timeout(std::time::Duration::from_millis(1000));
     }
 
     fn process_signals(&mut self) {
