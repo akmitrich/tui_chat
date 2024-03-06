@@ -1,34 +1,30 @@
-use std::sync::mpsc;
-
-use tokio::runtime::Runtime;
-
 use crate::{
     connector::{input_connector, output_connector, ConnectorEvent},
     controller_signals::ControllerSignal,
     ui::Ui,
 };
+use tokio::runtime::Runtime;
+use tokio::sync::mpsc;
 
 pub struct App {
     ui: Ui,
-    tx: mpsc::Sender<ControllerSignal>,
     rx: mpsc::Receiver<ControllerSignal>,
     async_runtime: Runtime,
-    async_tx: tokio::sync::mpsc::Sender<ConnectorEvent>,
-    async_rx: Option<tokio::sync::mpsc::Receiver<ConnectorEvent>>,
+    output_tx: mpsc::Sender<ConnectorEvent>,
 }
 
 impl App {
     pub fn new() -> Self {
-        let (tx, rx) = mpsc::channel();
-        let (async_tx, async_rx) = tokio::sync::mpsc::channel(1024);
+        let (tx, rx) = mpsc::channel(1024);
+        let (output_tx, output_rx) = tokio::sync::mpsc::channel(1024);
         let async_runtime = Runtime::new().expect("Failed to start asynchronous runtime.");
+        async_runtime.handle().spawn(output_connector(output_rx));
+        async_runtime.handle().spawn(input_connector(tx.clone()));
         Self {
             ui: Ui::new(tx.clone()),
-            tx,
             rx,
             async_runtime,
-            async_tx,
-            async_rx: Some(async_rx),
+            output_tx,
         }
     }
 
@@ -40,14 +36,6 @@ impl App {
 
 impl App {
     fn run(mut self) {
-        if let Some(async_rx) = self.async_rx.take() {
-            self.async_runtime
-                .handle()
-                .spawn(output_connector(async_rx));
-        }
-        self.async_runtime
-            .handle()
-            .spawn(input_connector(self.tx.clone()));
         loop {
             self.process_signals();
             self.ui.step_next();
@@ -56,7 +44,7 @@ impl App {
             }
         }
         self.async_runtime
-            .shutdown_timeout(std::time::Duration::from_millis(300));
+            .shutdown_timeout(std::time::Duration::from_millis(200));
     }
 
     fn process_signals(&mut self) {
@@ -68,16 +56,15 @@ impl App {
                     self.ui.append(&from, &message)
                 }
                 ControllerSignal::OutgoingMessage { message } => {
-                    let tx = self.async_tx.clone();
-                    self.async_runtime.handle().spawn(async move {
-                        let _ = tx.send(ConnectorEvent::Post { message }).await;
-                    });
+                    let _ = self
+                        .output_tx
+                        .blocking_send(ConnectorEvent::Post { message });
                 }
                 ControllerSignal::Info { message } => self.ui.present_info(&message),
                 ControllerSignal::Quit => self.ui.stop(),
             }
         }
-        if let Err(mpsc::TryRecvError::Disconnected) = self.rx.try_recv() {
+        if let Err(mpsc::error::TryRecvError::Disconnected) = self.rx.try_recv() {
             eprintln!("Application crashed!");
         }
     }

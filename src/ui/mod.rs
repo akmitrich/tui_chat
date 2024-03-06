@@ -1,16 +1,13 @@
 mod main_layout;
 
-use std::sync::mpsc;
-
+use self::main_layout::{create_main_layout, EDIT_ID, VIEW_ID};
+use crate::controller_signals::ControllerSignal;
 use cursive::{
     event::Event,
     views::{Dialog, EditView, TextArea, TextView},
     Cursive, CursiveRunner,
 };
-
-use crate::controller_signals::ControllerSignal;
-
-use self::main_layout::{create_main_layout, EDIT_ID, VIEW_ID};
+use tokio::sync::mpsc;
 
 pub struct Ui {
     runner: CursiveRunner<Cursive>,
@@ -35,16 +32,16 @@ impl Ui {
         self.runner.add_layer(
             Dialog::around(create_main_layout(self.tx.clone()))
                 .button("Submit", move |_| {
-                    let _ = tx_submit.send(ControllerSignal::Submit);
+                    let _ = tx_submit.blocking_send(ControllerSignal::Submit);
                 })
                 .button("Quit", move |_| {
-                    let _ = tx_quit.send(ControllerSignal::Quit);
+                    let _ = tx_quit.blocking_send(ControllerSignal::Quit);
                 }),
         );
         let tx_ctrl_q = self.tx.clone();
         self.runner
             .add_global_callback(Event::CtrlChar('q'), move |_| {
-                let _ = tx_ctrl_q.send(ControllerSignal::Quit);
+                let _ = tx_ctrl_q.blocking_send(ControllerSignal::Quit);
             });
         self.runner.refresh();
     }
@@ -66,7 +63,9 @@ impl Ui {
 
     pub fn submit(&mut self) {
         let message = self.take_message();
-        let _ = self.tx.send(ControllerSignal::OutgoingMessage { message });
+        let _ = self
+            .tx
+            .blocking_send(ControllerSignal::OutgoingMessage { message });
     }
 
     pub fn append(&mut self, from: &str, message: &str) {

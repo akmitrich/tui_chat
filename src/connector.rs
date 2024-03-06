@@ -1,4 +1,4 @@
-use std::sync::mpsc;
+use tokio::sync::mpsc;
 
 use redis::AsyncCommands;
 
@@ -44,16 +44,20 @@ pub async fn input_connector(tx: mpsc::Sender<ControllerSignal>) {
             con.xread_options(&[42], &["$"], &opts).await;
         match result {
             Ok(result) if !result.keys.is_empty() => {
-                let _ = tx.send(ControllerSignal::IncomingMessage {
-                    from: "Redis".to_owned(),
-                    message: format!("{:?}", result),
-                });
+                let _ = tx
+                    .send(ControllerSignal::IncomingMessage {
+                        from: "Redis".to_owned(),
+                        message: format!("{:?}", result.keys.first().unwrap()),
+                    })
+                    .await;
                 eprintln!("{:?}", result);
             }
             Err(e) => {
-                let _ = tx.send(ControllerSignal::Info {
-                    message: format!("ERROR: {:?}", e),
-                });
+                let _ = tx
+                    .send(ControllerSignal::Info {
+                        message: format!("ERROR: {:?}", e),
+                    })
+                    .await;
             }
             _ => {}
         }
