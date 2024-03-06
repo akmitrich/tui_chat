@@ -63,9 +63,16 @@ impl Ui {
 
     pub fn submit(&mut self) {
         let message = self.take_message();
-        let _ = self
-            .tx
-            .blocking_send(ControllerSignal::OutgoingMessage { message });
+        if message.is_empty() {
+            let _ = self.tx.blocking_send(ControllerSignal::Info {
+                message: "You are trying to send an empty message to the chat.\nThis is forbidden."
+                    .to_owned(),
+            });
+        } else {
+            let _ = self
+                .tx
+                .blocking_send(ControllerSignal::OutgoingMessage { message });
+        }
     }
 
     pub fn append(&mut self, from: &str, message: &str) {
