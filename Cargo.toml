@@ -5,7 +5,13 @@ edition = "2021"
 
 [dependencies]
 cursive = "0.20"
-tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
+redis = { version = "0.24.0", features = ["tokio-comp", "streams"] }
+tokio = { version = "1", features = [
+    "rt",
+    "rt-multi-thread",
+    "macros",
+    "sync",
+] }
 
 [[bin]]
 name = "app"
