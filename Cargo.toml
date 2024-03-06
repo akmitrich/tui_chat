@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+chrono = "0.4.35"
 cursive = "0.20"
 redis = { version = "0.24.0", features = ["tokio-comp", "streams"] }
 tokio = { version = "1", features = [

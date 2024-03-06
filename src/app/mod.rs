@@ -21,7 +21,7 @@ impl App {
         async_runtime.handle().spawn(output_connector(output_rx));
         async_runtime.handle().spawn(input_connector(tx.clone()));
         Self {
-            ui: Ui::new(tx.clone()),
+            ui: Ui::new(tx),
             rx,
             async_runtime,
             output_tx,
@@ -52,7 +52,7 @@ impl App {
             match signal {
                 ControllerSignal::Submit => self.ui.submit(),
                 ControllerSignal::IncomingMessage { from, message } => {
-                    eprintln!("{:?} -> {}", from, message);
+                    eprintln!("Incoming Message. {:?} -> {}", from, message);
                     self.ui.append(&from, &message)
                 }
                 ControllerSignal::OutgoingMessage { message } => {

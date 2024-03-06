@@ -1,8 +1,8 @@
-use tokio::sync::mpsc;
-
-use redis::AsyncCommands;
-
 use crate::controller_signals::ControllerSignal;
+use chrono::TimeZone;
+use redis::{from_redis_value, streams::StreamKey, AsyncCommands, Value};
+use std::{collections::HashMap, hash::BuildHasher};
+use tokio::sync::mpsc;
 
 pub enum ConnectorEvent {
     Post { message: String },
@@ -38,19 +38,16 @@ pub async fn input_connector(tx: mpsc::Sender<ControllerSignal>) {
     eprintln!("Start input");
     loop {
         let opts = redis::streams::StreamReadOptions::default()
-            .count(1)
+            .count(10)
             .block(100);
         let result: Result<redis::streams::StreamReadReply, _> =
             con.xread_options(&[42], &["$"], &opts).await;
         match result {
             Ok(result) if !result.keys.is_empty() => {
-                let _ = tx
-                    .send(ControllerSignal::IncomingMessage {
-                        from: "Redis".to_owned(),
-                        message: format!("{:?}", result.keys.first().unwrap()),
-                    })
-                    .await;
-                eprintln!("{:?}", result);
+                for key in result.keys {
+                    eprintln!("{:?}", key);
+                    process_input_key(tx.clone(), key).await;
+                }
             }
             Err(e) => {
                 let _ = tx
@@ -61,5 +58,47 @@ pub async fn input_connector(tx: mpsc::Sender<ControllerSignal>) {
             }
             _ => {}
         }
+    }
+}
+
+async fn process_input_key(tx: mpsc::Sender<ControllerSignal>, key: StreamKey) {
+    for redis::streams::StreamId { id, map } in key.ids {
+        processs_input_id(tx.clone(), &id, map).await
+    }
+}
+
+async fn processs_input_id<S: BuildHasher>(
+    tx: mpsc::Sender<ControllerSignal>,
+    id: &str,
+    map: HashMap<String, Value, S>,
+) {
+    for (from, message) in map {
+        let _ = tx.send(make_incoming_message(id, from, message)).await;
+    }
+}
+
+fn make_incoming_message(id: &str, from: String, message: Value) -> ControllerSignal {
+    ControllerSignal::IncomingMessage {
+        from,
+        message: format!(
+            "{}. {:?}",
+            make_timestamp_string(id),
+            from_redis_value::<String>(&message)
+                .unwrap_or_else(|e| format!("{:?} ({:?})", message, e))
+        ),
+    }
+}
+
+fn make_timestamp_string(id: &str) -> String {
+    if let Some((timestamp, _)) = id.split_once('-') {
+        format!(
+            "{}",
+            chrono::Local
+                .timestamp_millis_opt(timestamp.parse().unwrap())
+                .unwrap()
+                .format("%d/%m/%Y %H:%M")
+        )
+    } else {
+        String::new()
     }
 }

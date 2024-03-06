@@ -69,7 +69,7 @@ impl Ui {
     }
 
     pub fn append(&mut self, from: &str, message: &str) {
-        self.add_line_to_chat(&format!("{} -> {:?}", from, message));
+        self.add_line_to_chat(&format!("[{}] -> {}", from, message));
     }
 
     pub fn present_info(&mut self, message: &str) {
