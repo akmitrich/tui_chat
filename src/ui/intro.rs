@@ -26,6 +26,9 @@ fn start(siv: &mut Cursive, tx: mpsc::Sender<ControllerSignal>) {
         .call_on_name(CHAT_ID, |view: &mut EditView| view.get_content())
         .and_then(take_content);
     siv.pop_layer();
+    siv.call_on_name("main", |view: &mut Dialog| {
+        view.set_title(format!("{:?} @ {:?}", username, chat_id))
+    });
     let _ = tx.blocking_send(ControllerSignal::Info {
         message: format!("START\n{:?}\n{:?}", username, chat_id),
     });

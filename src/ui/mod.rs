@@ -1,7 +1,7 @@
 mod intro;
-mod main_layout;
+mod main;
 
-use self::main_layout::{create_main_layout, EDIT_ID, VIEW_ID};
+use self::main::{EDIT_ID, VIEW_ID};
 use crate::controller_signals::ControllerSignal;
 use cursive::{
     event::Event,
@@ -28,17 +28,8 @@ impl Ui {
     }
 
     pub fn init_view(&mut self) {
-        let tx_submit = self.tx.clone();
-        let tx_quit = self.tx.clone();
-        self.runner.add_layer(
-            Dialog::around(create_main_layout(self.tx.clone()))
-                .button("Submit", move |_| {
-                    let _ = tx_submit.blocking_send(ControllerSignal::Submit);
-                })
-                .button("Quit", move |_| {
-                    let _ = tx_quit.blocking_send(ControllerSignal::Quit);
-                }),
-        );
+        self.runner
+            .add_layer(main::create_main_view(self.tx.clone()));
         self.runner
             .add_layer(intro::create_intro_dialog(self.tx.clone()));
 
