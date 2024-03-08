@@ -8,15 +8,15 @@ use tokio::sync::mpsc;
 
 pub struct App {
     ui: Ui,
-    rx: mpsc::Receiver<ControllerSignal>,
     async_runtime: Runtime,
+    rx: mpsc::Receiver<ControllerSignal>,
     output_tx: mpsc::Sender<ConnectorEvent>,
 }
 
 impl App {
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel(1024);
-        let (output_tx, output_rx) = tokio::sync::mpsc::channel(1024);
+        let (output_tx, output_rx) = mpsc::channel(1024);
         let async_runtime = Runtime::new().expect("Failed to start asynchronous runtime.");
         async_runtime.handle().spawn(output_connector(output_rx));
         async_runtime.handle().spawn(input_connector(tx.clone()));

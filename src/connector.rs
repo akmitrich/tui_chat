@@ -10,8 +10,7 @@ pub enum ConnectorEvent {
 
 pub async fn output_connector(mut rx: tokio::sync::mpsc::Receiver<ConnectorEvent>) {
     eprintln!("Output thread begins.");
-    let client = redis::Client::open("redis://127.0.0.1/").unwrap();
-    let mut con = client.get_async_connection().await.unwrap();
+    let mut con = create_redis_connection().await;
     eprintln!("Start output");
     while let Some(event) = rx.recv().await {
         match event {
@@ -27,14 +26,7 @@ pub async fn output_connector(mut rx: tokio::sync::mpsc::Receiver<ConnectorEvent
 
 pub async fn input_connector(tx: mpsc::Sender<ControllerSignal>) {
     eprintln!("Input thread begins.");
-    let client = redis::Client::open("redis://127.0.0.1/")
-        .map_err(|e| eprintln!("Failed open client: {:?}", e))
-        .unwrap();
-    let mut con = client
-        .get_tokio_connection()
-        .await
-        .map_err(|e| eprintln!("Failed get connection: {:?}", e))
-        .unwrap();
+    let mut con = create_redis_connection().await;
     eprintln!("Start input");
     loop {
         let opts = redis::streams::StreamReadOptions::default()
@@ -59,6 +51,17 @@ pub async fn input_connector(tx: mpsc::Sender<ControllerSignal>) {
             _ => {}
         }
     }
+}
+
+async fn create_redis_connection() -> redis::aio::Connection {
+    let client = redis::Client::open("redis://127.0.0.1/")
+        .map_err(|e| eprintln!("Failed open client: {:?}", e))
+        .unwrap();
+    client
+        .get_tokio_connection()
+        .await
+        .map_err(|e| eprintln!("Failed get connection: {:?}", e))
+        .unwrap()
 }
 
 async fn process_input_key(tx: mpsc::Sender<ControllerSignal>, key: StreamKey) {

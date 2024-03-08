@@ -1,3 +1,4 @@
+mod intro;
 mod main_layout;
 
 use self::main_layout::{create_main_layout, EDIT_ID, VIEW_ID};
@@ -38,6 +39,9 @@ impl Ui {
                     let _ = tx_quit.blocking_send(ControllerSignal::Quit);
                 }),
         );
+        self.runner
+            .add_layer(intro::create_intro_dialog(self.tx.clone()));
+
         let tx_ctrl_q = self.tx.clone();
         self.runner
             .add_global_callback(Event::CtrlChar('q'), move |_| {
