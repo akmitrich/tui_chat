@@ -8,7 +8,11 @@ pub enum ConnectorEvent {
     Post { message: String },
 }
 
-pub async fn output_connector(mut rx: tokio::sync::mpsc::Receiver<ConnectorEvent>) {
+pub async fn output_connector(
+    username: String,
+    chat_id: String,
+    mut rx: tokio::sync::mpsc::Receiver<ConnectorEvent>,
+) {
     eprintln!("Output thread begins.");
     let mut con = create_redis_connection().await;
     eprintln!("Start output");
@@ -16,7 +20,11 @@ pub async fn output_connector(mut rx: tokio::sync::mpsc::Receiver<ConnectorEvent
         match event {
             ConnectorEvent::Post { message } => {
                 let _: () = con
-                    .xadd("42", "*", &[("Master", message.as_str())])
+                    .xadd(
+                        chat_id.clone(),
+                        "*",
+                        &[(username.clone(), message.as_str())],
+                    )
                     .await
                     .unwrap();
             }
@@ -24,7 +32,7 @@ pub async fn output_connector(mut rx: tokio::sync::mpsc::Receiver<ConnectorEvent
     }
 }
 
-pub async fn input_connector(tx: mpsc::Sender<ControllerSignal>) {
+pub async fn input_connector(chat_id: String, tx: mpsc::Sender<ControllerSignal>) {
     eprintln!("Input thread begins.");
     let mut con = create_redis_connection().await;
     eprintln!("Start input");
@@ -33,7 +41,7 @@ pub async fn input_connector(tx: mpsc::Sender<ControllerSignal>) {
             .count(10)
             .block(100);
         let result: Result<redis::streams::StreamReadReply, _> =
-            con.xread_options(&[42], &["$"], &opts).await;
+            con.xread_options(&[chat_id.clone()], &["$"], &opts).await;
         match result {
             Ok(result) if !result.keys.is_empty() => {
                 for key in result.keys {
@@ -99,7 +107,7 @@ fn make_timestamp_string(id: &str) -> String {
             chrono::Local
                 .timestamp_millis_opt(timestamp.parse().unwrap())
                 .unwrap()
-                .format("%d/%m/%Y %H:%M")
+                .format("%d/%m/%Y %H:%M:%S")
         )
     } else {
         String::new()

@@ -10,21 +10,20 @@ pub struct App {
     ui: Ui,
     async_runtime: Runtime,
     rx: mpsc::Receiver<ControllerSignal>,
-    output_tx: mpsc::Sender<ConnectorEvent>,
+    tx: mpsc::Sender<ControllerSignal>,
+    output_tx: Option<mpsc::Sender<ConnectorEvent>>,
 }
 
 impl App {
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel(1024);
-        let (output_tx, output_rx) = mpsc::channel(1024);
         let async_runtime = Runtime::new().expect("Failed to start asynchronous runtime.");
-        async_runtime.handle().spawn(output_connector(output_rx));
-        async_runtime.handle().spawn(input_connector(tx.clone()));
         Self {
-            ui: Ui::new(tx),
-            rx,
+            ui: Ui::new(tx.clone()),
             async_runtime,
-            output_tx,
+            rx,
+            tx,
+            output_tx: None,
         }
     }
 
@@ -50,23 +49,43 @@ impl App {
     fn process_signals(&mut self) {
         while let Ok(signal) = self.rx.try_recv() {
             match signal {
-                ControllerSignal::Submit => self.ui.submit(),
                 ControllerSignal::IncomingMessage { from, message } => {
                     eprintln!("Incoming Message. {:?} -> {}", from, message);
                     self.ui.append(&from, &message)
                 }
-                ControllerSignal::OutgoingMessage { message } => {
-                    let _ = self
-                        .output_tx
-                        .blocking_send(ConnectorEvent::Post { message });
-                }
                 ControllerSignal::Info { message } => self.ui.present_info(&message),
+                ControllerSignal::Intro { username, chat_id } => {
+                    self.connect_to(
+                        username.as_ref().map(|s| s.as_str()).unwrap_or("NONAME"),
+                        chat_id.as_ref().map(|s| s.as_str()).unwrap_or("42"),
+                    );
+                }
+                ControllerSignal::OutgoingMessage { message } => {
+                    if let Some(output_tx) = self.output_tx.as_ref() {
+                        let _ = output_tx.blocking_send(ConnectorEvent::Post { message });
+                    }
+                }
+                ControllerSignal::Submit => self.ui.submit(),
                 ControllerSignal::Quit => self.ui.stop(),
             }
         }
         if let Err(mpsc::error::TryRecvError::Disconnected) = self.rx.try_recv() {
             eprintln!("Application crashed!");
         }
+    }
+
+    fn connect_to(&mut self, username: &str, chat_id: &str) {
+        self.ui.change_title(&format!("{} @ {}", username, chat_id));
+        let (tx, output_rx) = mpsc::channel(1024);
+        self.output_tx = Some(tx);
+        self.async_runtime.handle().spawn(output_connector(
+            username.to_owned(),
+            chat_id.to_owned(),
+            output_rx,
+        ));
+        self.async_runtime
+            .handle()
+            .spawn(input_connector(chat_id.to_owned(), self.tx.clone()));
     }
 }
 

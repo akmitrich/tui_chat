@@ -1,7 +1,7 @@
 mod intro;
 mod main;
 
-use self::main::{EDIT_ID, VIEW_ID};
+use self::main::{EDIT_ID, MAIN_ID, VIEW_ID};
 use crate::controller_signals::ControllerSignal;
 use cursive::{
     event::Event,
@@ -54,6 +54,11 @@ impl Ui {
 
     pub fn stop(&mut self) {
         self.runner.quit();
+    }
+
+    pub fn change_title(&mut self, title: &str) {
+        self.runner
+            .call_on_name(MAIN_ID, |view: &mut Dialog| view.set_title(title));
     }
 
     pub fn submit(&mut self) {
