@@ -1,6 +1,10 @@
 use crate::controller_signals::ControllerSignal;
 use chrono::TimeZone;
-use redis::{from_redis_value, streams::StreamKey, AsyncCommands, Value};
+use redis::{
+    from_redis_value,
+    streams::{StreamKey, StreamRangeReply},
+    AsyncCommands, Value,
+};
 use std::{collections::HashMap, hash::BuildHasher};
 use tokio::sync::mpsc;
 
@@ -36,6 +40,7 @@ pub async fn input_connector(chat_id: String, tx: mpsc::Sender<ControllerSignal>
     eprintln!("Input thread begins.");
     let mut con = create_redis_connection().await;
     eprintln!("Start input");
+    read_old_messages(&mut con, &chat_id, tx.clone()).await;
     loop {
         let opts = redis::streams::StreamReadOptions::default()
             .count(10)
@@ -61,24 +66,38 @@ pub async fn input_connector(chat_id: String, tx: mpsc::Sender<ControllerSignal>
     }
 }
 
-async fn create_redis_connection() -> redis::aio::Connection {
+async fn create_redis_connection() -> redis::aio::MultiplexedConnection {
     let client = redis::Client::open("redis://127.0.0.1/")
         .map_err(|e| eprintln!("Failed open client: {:?}", e))
         .unwrap();
     client
-        .get_tokio_connection()
+        .get_multiplexed_tokio_connection()
         .await
         .map_err(|e| eprintln!("Failed get connection: {:?}", e))
         .unwrap()
 }
 
-async fn process_input_key(tx: mpsc::Sender<ControllerSignal>, key: StreamKey) {
-    for redis::streams::StreamId { id, map } in key.ids {
-        processs_input_id(tx.clone(), &id, map).await
+async fn read_old_messages(
+    con: &mut redis::aio::MultiplexedConnection,
+    chat_id: &str,
+    tx: mpsc::Sender<ControllerSignal>,
+) {
+    let prev: Option<StreamRangeReply> = con.xrange_all(chat_id).await.unwrap();
+    if let Some(reply) = prev {
+        for stream_id in reply.ids {
+            eprintln!("Prev: {:?}", stream_id);
+            process_input_id(tx.clone(), &stream_id.id, stream_id.map).await;
+        }
     }
 }
 
-async fn processs_input_id<S: BuildHasher>(
+async fn process_input_key(tx: mpsc::Sender<ControllerSignal>, key: StreamKey) {
+    for redis::streams::StreamId { id, map } in key.ids {
+        process_input_id(tx.clone(), &id, map).await
+    }
+}
+
+async fn process_input_id<S: BuildHasher>(
     tx: mpsc::Sender<ControllerSignal>,
     id: &str,
     map: HashMap<String, Value, S>,
