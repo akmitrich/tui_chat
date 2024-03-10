@@ -15,7 +15,12 @@ pub fn create_intro_dialog(tx: mpsc::Sender<ControllerSignal>) -> Dialog {
     let entry_name = entry("Enter your name:\t", NAME_ID, tx.clone());
     let entry_chat = entry("Enter chat ID:\t", CHAT_ID, tx.clone());
     let layout = LinearLayout::vertical().child(entry_name).child(entry_chat);
-    Dialog::around(layout).button("OK", move |siv| start(siv, tx.clone()))
+    let quit_tx = tx.clone();
+    Dialog::around(layout)
+        .button("Connect", move |siv| start(siv, tx.clone()))
+        .button("Cancel", move |_| {
+            let _ = quit_tx.blocking_send(ControllerSignal::Quit);
+        })
 }
 
 fn start(siv: &mut Cursive, tx: mpsc::Sender<ControllerSignal>) {

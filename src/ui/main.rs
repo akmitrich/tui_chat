@@ -17,7 +17,7 @@ pub fn create_main_view(tx: mpsc::Sender<ControllerSignal>) -> impl View {
         .button("Submit", move |_| {
             let _ = tx_submit.blocking_send(ControllerSignal::Submit);
         })
-        .button("Quit", move |_| {
+        .button("Disconnect", move |_| {
             let _ = tx_quit.blocking_send(ControllerSignal::Quit);
         })
         .title("Main View")
