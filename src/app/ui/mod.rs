@@ -18,22 +18,21 @@ impl Ui {
     pub fn new(tx: mpsc::Sender<ControllerSignal>) -> Self {
         let ncurses =
             cursive::backends::curses::n::Backend::init().expect("Failed to init ncurses backend.");
-        let mut runner = CursiveRunner::new(Cursive::default(), ncurses);
-        runner.set_window_title(format!(
-            "Chatroom: {}",
-            std::env::args().nth(1).unwrap_or_else(|| "42".to_owned())
-        ));
+        let runner = CursiveRunner::new(Cursive::default(), ncurses);
+
         Self { runner, tx }
     }
 
     pub fn init_view(&mut self) {
-        self.runner
-            .add_layer(main::create_main_view(self.tx.clone()));
         let tx_ctrl_q = self.tx.clone();
         self.runner
             .add_global_callback(Event::CtrlChar('q'), move |_| {
                 let _ = tx_ctrl_q.blocking_send(ControllerSignal::Quit);
             });
+
+        self.runner
+            .add_layer(main::create_main_view(self.tx.clone()));
+
         self.runner.refresh();
     }
 

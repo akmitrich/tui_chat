@@ -50,6 +50,8 @@ impl App {
                 break;
             }
         }
+        // We have to move self into shutdown_timeout(...)
+        // That is why it is difficult to impl Drop for App
         self.async_runtime
             .shutdown_timeout(std::time::Duration::from_millis(200));
     }
@@ -58,15 +60,21 @@ impl App {
         while let Ok(signal) = self.rx.try_recv() {
             match signal {
                 ControllerSignal::IncomingMessage { from, message } => {
-                    eprintln!("Incoming Message. {:?} -> {}", from, message);
                     self.ui.append(&from, &message)
                 }
                 ControllerSignal::Info { message } => self.ui.present_info(&message),
-                ControllerSignal::Intro { username, chat_id } => {
-                    self.connect_to(
-                        username.as_deref().unwrap_or("NONAME"),
-                        chat_id.as_deref().unwrap_or("42"),
-                    );
+                ControllerSignal::ConnectTo { username, chat_id } => {
+                    if self.output_tx.is_none() {
+                        self.connect_to(
+                            username.as_deref().unwrap_or("NONAME"),
+                            chat_id.as_deref().unwrap_or("42"),
+                        );
+                    } else {
+                        let _ = self.tx.blocking_send(ControllerSignal::Info {
+                            message: "RUNTIME ERROR:\ntrying to connect when already connected."
+                                .to_owned(),
+                        });
+                    }
                 }
                 ControllerSignal::OutgoingMessage { message } => {
                     if let Some(output_tx) = self.output_tx.as_ref() {
@@ -87,7 +95,7 @@ impl App {
         let chat_ids = utils::blocking_get_json(con, session_id, "$.chat_id")?;
 
         self.tx
-            .blocking_send(ControllerSignal::Intro {
+            .blocking_send(ControllerSignal::ConnectTo {
                 username: utils::extract_one_string_from_array(&usernames),
                 chat_id: utils::extract_one_string_from_array(&chat_ids),
             })

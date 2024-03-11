@@ -6,7 +6,7 @@ pub enum ControllerSignal {
     Info {
         message: String,
     },
-    Intro {
+    ConnectTo {
         username: Option<String>,
         chat_id: Option<String>,
     },

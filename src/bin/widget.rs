@@ -3,6 +3,7 @@ fn main() {
         let app = tui_chat::app::App::new();
         app.go(&session_id);
     } else {
-        eprintln!("\nUsage: widget SESSION_ID\n");
+        eprintln!("\nUsage:\n\twidget SESSION_ID\n");
+        eprintln!("Please start over with SESSION_ID");
     }
 }

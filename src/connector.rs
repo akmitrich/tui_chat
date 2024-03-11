@@ -3,7 +3,7 @@ use chrono::TimeZone;
 use redis::{
     from_redis_value,
     streams::{StreamKey, StreamRangeReply},
-    AsyncCommands, Value,
+    AsyncCommands,
 };
 use std::{collections::HashMap, hash::BuildHasher};
 use tokio::sync::mpsc;
@@ -18,19 +18,18 @@ pub async fn output_connector(
     mut rx: tokio::sync::mpsc::Receiver<ConnectorEvent>,
 ) {
     eprintln!("Output thread begins.");
-    let mut con = create_redis_connection().await;
+    let mut con = create_async_redis_connection().await;
     eprintln!("Start output");
     while let Some(event) = rx.recv().await {
         match event {
             ConnectorEvent::Post { message } => {
-                let _: () = con
+                let _: redis::RedisResult<()> = con
                     .xadd(
                         chat_id.clone(),
                         "*",
                         &[(username.clone(), message.as_str())],
                     )
-                    .await
-                    .unwrap();
+                    .await;
             }
         }
     }
@@ -38,9 +37,11 @@ pub async fn output_connector(
 
 pub async fn input_connector(chat_id: String, tx: mpsc::Sender<ControllerSignal>) {
     eprintln!("Input thread begins.");
-    let mut con = create_redis_connection().await;
+    let mut con = create_async_redis_connection().await;
     eprintln!("Start input");
+
     read_old_messages(&mut con, &chat_id, tx.clone()).await;
+
     loop {
         let opts = redis::streams::StreamReadOptions::default()
             .count(10)
@@ -50,14 +51,14 @@ pub async fn input_connector(chat_id: String, tx: mpsc::Sender<ControllerSignal>
         match result {
             Ok(result) if !result.keys.is_empty() => {
                 for key in result.keys {
-                    eprintln!("{:?}", key);
+                    eprintln!("From stream {:?}", key);
                     process_input_key(tx.clone(), key).await;
                 }
             }
             Err(e) => {
                 let _ = tx
                     .send(ControllerSignal::Info {
-                        message: format!("ERROR: {:?}", e),
+                        message: format!("REDIS ERROR: {:?}", e),
                     })
                     .await;
             }
@@ -66,7 +67,7 @@ pub async fn input_connector(chat_id: String, tx: mpsc::Sender<ControllerSignal>
     }
 }
 
-pub async fn create_redis_connection() -> redis::aio::MultiplexedConnection {
+pub async fn create_async_redis_connection() -> redis::aio::MultiplexedConnection {
     let client = redis::Client::open("redis://127.0.0.1/")
         .map_err(|e| eprintln!("Failed open client: {:?}", e))
         .unwrap();
@@ -87,7 +88,7 @@ async fn read_old_messages(
     chat_id: &str,
     tx: mpsc::Sender<ControllerSignal>,
 ) {
-    let prev: Option<StreamRangeReply> = con.xrange_all(chat_id).await.unwrap();
+    let prev: Option<StreamRangeReply> = con.xrange_all(chat_id).await.unwrap_or_default();
     if let Some(reply) = prev {
         for stream_id in reply.ids {
             eprintln!("Prev: {:?}", stream_id);
@@ -105,14 +106,14 @@ async fn process_input_key(tx: mpsc::Sender<ControllerSignal>, key: StreamKey) {
 async fn process_input_id<S: BuildHasher>(
     tx: mpsc::Sender<ControllerSignal>,
     id: &str,
-    map: HashMap<String, Value, S>,
+    map: HashMap<String, redis::Value, S>,
 ) {
     for (from, message) in map {
         let _ = tx.send(make_incoming_message(id, from, message)).await;
     }
 }
 
-fn make_incoming_message(id: &str, from: String, message: Value) -> ControllerSignal {
+fn make_incoming_message(id: &str, from: String, message: redis::Value) -> ControllerSignal {
     ControllerSignal::IncomingMessage {
         from,
         message: format!(
