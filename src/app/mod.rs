@@ -1,8 +1,11 @@
 use crate::{
-    connector::{input_connector, output_connector, ConnectorEvent},
+    connector::{
+        create_blocking_redis_connection, input_connector, output_connector, ConnectorEvent,
+    },
     controller_signals::ControllerSignal,
     ui::Ui,
 };
+use redis::JsonCommands;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 
@@ -29,6 +32,9 @@ impl App {
 
     pub fn go(mut self) {
         self.ui.init_view();
+        if !self.init_session() {
+            self.ui.make_intro();
+        }
         self.run();
     }
 }
@@ -72,6 +78,40 @@ impl App {
         if let Err(mpsc::error::TryRecvError::Disconnected) = self.rx.try_recv() {
             eprintln!("Application crashed!");
         }
+    }
+
+    fn init_session(&mut self) -> bool {
+        let Some(session) = std::env::args().nth(1) else {
+            return false;
+        };
+        let Ok(mut con) = create_blocking_redis_connection() else {
+            return false;
+        };
+        let username = con
+            .json_get(&session, "$.username")
+            .ok()
+            .and_then(|s: String| serde_json::from_str::<serde_json::Value>(&s).ok());
+        let chat_id = con
+            .json_get(&session, "$.chat_id")
+            .ok()
+            .and_then(|s: String| serde_json::from_str::<serde_json::Value>(&s).ok());
+        if username.is_none() || chat_id.is_none() {
+            return false;
+        }
+        let username = username.and_then(|v| {
+            v.as_array()
+                .and_then(|v| v.first().and_then(|s| s.as_str()))
+                .map(ToOwned::to_owned)
+        });
+        let chat_id = chat_id.and_then(|v| {
+            v.as_array()
+                .and_then(|v| v.first().and_then(|s| s.as_str()))
+                .map(ToOwned::to_owned)
+        });
+
+        self.tx
+            .blocking_send(ControllerSignal::Intro { username, chat_id })
+            .is_ok()
     }
 
     fn connect_to(&mut self, username: &str, chat_id: &str) {

@@ -77,6 +77,11 @@ pub async fn create_redis_connection() -> redis::aio::MultiplexedConnection {
         .unwrap()
 }
 
+pub fn create_blocking_redis_connection() -> redis::RedisResult<redis::Connection> {
+    let client = redis::Client::open("redis://127.0.0.1/")?;
+    client.get_connection()
+}
+
 async fn read_old_messages(
     con: &mut redis::aio::MultiplexedConnection,
     chat_id: &str,
