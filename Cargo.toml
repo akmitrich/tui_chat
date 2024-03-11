@@ -6,7 +6,8 @@ edition = "2021"
 [dependencies]
 chrono = "0.4.35"
 cursive = "0.20"
-redis = { version = "0.25", features = ["tokio-comp", "streams"] }
+redis = { version = "0.25", features = ["tokio-comp", "streams", "json"] }
+serde_json = "1"
 tokio = { version = "1", features = [
     "rt",
     "rt-multi-thread",

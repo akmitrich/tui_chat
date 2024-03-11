@@ -56,8 +56,8 @@ impl App {
                 ControllerSignal::Info { message } => self.ui.present_info(&message),
                 ControllerSignal::Intro { username, chat_id } => {
                     self.connect_to(
-                        username.as_ref().map(|s| s.as_str()).unwrap_or("NONAME"),
-                        chat_id.as_ref().map(|s| s.as_str()).unwrap_or("42"),
+                        username.as_deref().unwrap_or("NONAME"),
+                        chat_id.as_deref().unwrap_or("42"),
                     );
                 }
                 ControllerSignal::OutgoingMessage { message } => {

@@ -30,9 +30,18 @@ impl Ui {
     pub fn init_view(&mut self) {
         self.runner
             .add_layer(main::create_main_view(self.tx.clone()));
-        self.runner
-            .add_layer(intro::create_intro_dialog(self.tx.clone()));
-
+        let params = std::env::args().collect::<Vec<_>>();
+        match (params.get(1), params.get(2)) {
+            (Some(username), Some(chat_id)) => {
+                let _ = self.tx.blocking_send(ControllerSignal::Intro {
+                    username: Some(username.to_owned()),
+                    chat_id: Some(chat_id.to_owned()),
+                });
+            }
+            _ => self
+                .runner
+                .add_layer(intro::create_intro_dialog(self.tx.clone())),
+        }
         let tx_ctrl_q = self.tx.clone();
         self.runner
             .add_global_callback(Event::CtrlChar('q'), move |_| {
@@ -59,6 +68,7 @@ impl Ui {
     pub fn change_title(&mut self, title: &str) {
         self.runner
             .call_on_name(MAIN_ID, |view: &mut Dialog| view.set_title(title));
+        self.runner.set_window_title(title);
     }
 
     pub fn submit(&mut self) {

@@ -66,7 +66,7 @@ pub async fn input_connector(chat_id: String, tx: mpsc::Sender<ControllerSignal>
     }
 }
 
-async fn create_redis_connection() -> redis::aio::MultiplexedConnection {
+pub async fn create_redis_connection() -> redis::aio::MultiplexedConnection {
     let client = redis::Client::open("redis://127.0.0.1/")
         .map_err(|e| eprintln!("Failed open client: {:?}", e))
         .unwrap();
