@@ -1,4 +1,3 @@
-mod intro;
 mod main;
 
 use self::main::{EDIT_ID, MAIN_ID, VIEW_ID};
@@ -36,11 +35,6 @@ impl Ui {
                 let _ = tx_ctrl_q.blocking_send(ControllerSignal::Quit);
             });
         self.runner.refresh();
-    }
-
-    pub fn make_intro(&mut self) {
-        self.runner
-            .add_layer(intro::create_intro_dialog(self.tx.clone()));
     }
 
     pub fn step_next(&mut self) {
