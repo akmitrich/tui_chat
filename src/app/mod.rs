@@ -1,16 +1,17 @@
+mod ui;
+
 use crate::{
     connector::{
         create_blocking_redis_connection, input_connector, output_connector, ConnectorEvent,
     },
     controller_signals::ControllerSignal,
-    ui::Ui,
     utils,
 };
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 
 pub struct App {
-    ui: Ui,
+    ui: ui::Ui,
     async_runtime: Runtime,
     rx: mpsc::Receiver<ControllerSignal>,
     tx: mpsc::Sender<ControllerSignal>,
@@ -22,7 +23,7 @@ impl App {
         let (tx, rx) = mpsc::channel(1024);
         let async_runtime = Runtime::new().expect("Failed to start asynchronous runtime.");
         Self {
-            ui: Ui::new(tx.clone()),
+            ui: ui::Ui::new(tx.clone()),
             async_runtime,
             rx,
             tx,
