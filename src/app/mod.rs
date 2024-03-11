@@ -4,8 +4,8 @@ use crate::{
     },
     controller_signals::ControllerSignal,
     ui::Ui,
+    utils,
 };
-use redis::JsonCommands;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 
@@ -30,12 +30,13 @@ impl App {
         }
     }
 
-    pub fn go(mut self) {
+    pub fn go(mut self, session_id: &str) -> Option<()> {
         self.ui.init_view();
-        if !self.init_session() {
-            self.ui.make_intro();
-        }
+        let mut con = create_blocking_redis_connection().ok()?;
+        self.init_session(&mut con, session_id)?;
         self.run();
+        utils::blocking_update_session_timestamp(&mut con, session_id);
+        Some(())
     }
 }
 
@@ -80,38 +81,16 @@ impl App {
         }
     }
 
-    fn init_session(&mut self) -> bool {
-        let Some(session) = std::env::args().nth(1) else {
-            return false;
-        };
-        let Ok(mut con) = create_blocking_redis_connection() else {
-            return false;
-        };
-        let username = con
-            .json_get(&session, "$.username")
-            .ok()
-            .and_then(|s: String| serde_json::from_str::<serde_json::Value>(&s).ok());
-        let chat_id = con
-            .json_get(&session, "$.chat_id")
-            .ok()
-            .and_then(|s: String| serde_json::from_str::<serde_json::Value>(&s).ok());
-        if username.is_none() || chat_id.is_none() {
-            return false;
-        }
-        let username = username.and_then(|v| {
-            v.as_array()
-                .and_then(|v| v.first().and_then(|s| s.as_str()))
-                .map(ToOwned::to_owned)
-        });
-        let chat_id = chat_id.and_then(|v| {
-            v.as_array()
-                .and_then(|v| v.first().and_then(|s| s.as_str()))
-                .map(ToOwned::to_owned)
-        });
+    fn init_session(&mut self, con: &mut redis::Connection, session_id: &str) -> Option<()> {
+        let usernames = utils::blocking_get_json(con, session_id, "$.username")?;
+        let chat_ids = utils::blocking_get_json(con, session_id, "$.chat_id")?;
 
         self.tx
-            .blocking_send(ControllerSignal::Intro { username, chat_id })
-            .is_ok()
+            .blocking_send(ControllerSignal::Intro {
+                username: utils::extract_one_string_from_array(&usernames),
+                chat_id: utils::extract_one_string_from_array(&chat_ids),
+            })
+            .ok()
     }
 
     fn connect_to(&mut self, username: &str, chat_id: &str) {
