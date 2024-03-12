@@ -12,6 +12,27 @@ pub enum ConnectorEvent {
     Post { message: String },
 }
 
+pub async fn read_from_stream(
+    con: &mut redis::aio::MultiplexedConnection,
+    chat_id: &str,
+) -> redis::RedisResult<Vec<StreamKey>> {
+    let opts = redis::streams::StreamReadOptions::default()
+        .count(10)
+        .block(0);
+    let result: redis::streams::StreamReadReply = con
+        .xread_options(&[chat_id.to_owned()], &["$"], &opts)
+        .await?;
+    Ok(result.keys)
+}
+
+pub async fn write_to_stream(
+    con: &mut redis::aio::MultiplexedConnection,
+    chat_id: &str,
+    items: &[(&str, &str)],
+) {
+    let _: redis::RedisResult<()> = con.xadd(chat_id, "*", items).await;
+}
+
 pub async fn output_connector(
     username: String,
     chat_id: String,
@@ -23,13 +44,7 @@ pub async fn output_connector(
     while let Some(event) = rx.recv().await {
         match event {
             ConnectorEvent::Post { message } => {
-                let _: redis::RedisResult<()> = con
-                    .xadd(
-                        chat_id.clone(),
-                        "*",
-                        &[(username.clone(), message.as_str())],
-                    )
-                    .await;
+                write_to_stream(&mut con, &chat_id, &[(username.as_str(), message.as_str())]).await;
             }
         }
     }
@@ -43,14 +58,9 @@ pub async fn input_connector(chat_id: String, tx: mpsc::Sender<ControllerSignal>
     read_old_messages(&mut con, &chat_id, tx.clone()).await;
 
     loop {
-        let opts = redis::streams::StreamReadOptions::default()
-            .count(10)
-            .block(100);
-        let result: Result<redis::streams::StreamReadReply, _> =
-            con.xread_options(&[chat_id.clone()], &["$"], &opts).await;
-        match result {
-            Ok(result) if !result.keys.is_empty() => {
-                for key in result.keys {
+        match read_from_stream(&mut con, &chat_id).await {
+            Ok(result) if !result.is_empty() => {
+                for key in result {
                     eprintln!("From stream {:?}", key);
                     process_input_key(tx.clone(), key).await;
                 }
