@@ -3,6 +3,7 @@ pub enum Command {
     Wait,
     Finish,
     Pause,
+    Operator,
     Noop,
 }
 
@@ -12,6 +13,7 @@ impl From<&str> for Command {
             "Wait" => Self::Wait,
             "Finish" => Self::Finish,
             "Pause" => Self::Pause,
+            "Operator" => Self::Operator,
             _ => Self::Noop,
         }
     }

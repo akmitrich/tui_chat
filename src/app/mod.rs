@@ -91,8 +91,8 @@ impl App {
     }
 
     fn init_session(&mut self, con: &mut redis::Connection, session_id: &str) -> Option<()> {
-        let usernames = utils::blocking_get_json(con, session_id, "$.username")?;
-        let chat_ids = utils::blocking_get_json(con, session_id, "$.chat_id")?;
+        let usernames = utils::blocking_get_from_session(con, session_id, "$.username")?;
+        let chat_ids = utils::blocking_get_from_session(con, session_id, "$.chat_id")?;
 
         self.tx
             .blocking_send(ControllerSignal::ConnectTo {

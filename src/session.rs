@@ -1,3 +1,4 @@
+use redis::JsonAsyncCommands as _;
 use serde_json::json;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -25,5 +26,17 @@ impl Session {
             timestamp: ts,
             context: json!({}),
         }
+    }
+
+    pub async fn update(&self, con: &mut redis::aio::MultiplexedConnection, session_id: &str) {
+        let now = chrono::Local::now();
+        let _: redis::RedisResult<()> = con
+            .json_set(
+                session_id,
+                "$.timestamp",
+                &serde_json::json!(now.timestamp_millis()),
+            )
+            .await;
+        let _: redis::RedisResult<()> = con.json_set(session_id, "$.context", &self.context).await;
     }
 }
