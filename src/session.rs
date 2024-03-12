@@ -2,14 +2,14 @@ use serde_json::json;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Session {
-    chat_id: String,
-    started: i64,
-    script: String,
-    username: String,
-    robot: String,
-    operator: String,
-    timestamp: i64,
-    context: serde_json::Value,
+    pub chat_id: String,
+    pub started: i64,
+    pub script: String,
+    pub username: String,
+    pub robot: String,
+    pub operator: String,
+    pub timestamp: i64,
+    pub context: serde_json::Value,
 }
 
 impl Session {
