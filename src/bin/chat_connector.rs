@@ -1,4 +1,5 @@
 use redis::JsonAsyncCommands;
+use tui_chat::session::Session;
 
 #[tokio::main]
 async fn main() {
@@ -8,5 +9,12 @@ async fn main() {
         .json_get(session_id, "$")
         .await
         .map(|s: String| serde_json::from_str::<Vec<tui_chat::session::Session>>(&s).unwrap());
-    dbg!(session).ok();
+    match session {
+        Ok(s) => serve(&mut con, s.first().unwrap()).await,
+        Err(_) => todo!(),
+    }
+}
+
+async fn serve(con: &mut redis::aio::MultiplexedConnection, session: &Session) {
+    let chat_client = 
 }
