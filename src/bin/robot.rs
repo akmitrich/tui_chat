@@ -31,7 +31,7 @@ async fn serve(con: &mut redis::aio::MultiplexedConnection, session_id: &str) {
                 break;
             }
         };
-        session.update(con, session_id).await;
+        session.update_to_redis(con, session_id).await;
     }
     eprintln!("Final: {:#?}", session.context);
 }
@@ -57,33 +57,29 @@ async fn on_success(
     match resp.json::<serde_json::Value>().await {
         Ok(mut interpreted) => {
             eprintln!("Received: {:#?}", interpreted);
-            tui_chat::utils::user_output_into_session(
-                con,
-                session,
-                interpreted["user_output"].take(),
-            )
-            .await;
+            session
+                .send_user_output_to_redis(con, interpreted["user_output"].take())
+                .await;
 
             session.context["context"] = interpreted["context"].take();
             match Command::from(interpreted["command"].as_str().unwrap()) {
                 Command::Wait => {
-                    session.context["user_input"] = serde_json::Value::Array(vec![]);
-                    if let Some(serde_json::Value::Array(inp)) =
-                        session.context.get_mut("user_input")
-                    {
-                        wait_for_user_input(
-                            con,
-                            session.chat_id.as_str(),
-                            session.username.as_str(),
-                            inp,
-                        )
-                        .await;
-                    }
+                    wait_for_user_input(con, session).await;
                     Some(true)
                 }
-                Command::Finish => Some(false),
+                Command::Finish => {
+                    session.context = serde_json::json!({});
+                    Some(false)
+                }
                 Command::Pause => Some(true),
-                Command::Operator => Some(false),
+                Command::Operator => {
+                    eprintln!(
+                        "Need operator in chat {:?}. {:?}",
+                        session.chat_id,
+                        session.context["operator_message"].as_str()
+                    );
+                    Some(false)
+                }
                 Command::Noop => {
                     eprint!("NOOP after command: {:?}.", interpreted["command"]);
                     None
@@ -99,19 +95,21 @@ async fn on_success(
 
 async fn wait_for_user_input(
     con: &mut redis::aio::MultiplexedConnection,
-    chat_id: &str,
-    username: &str,
-    inp: &mut Vec<serde_json::Value>,
+    session: &mut tui_chat::session::Session,
 ) {
-    while inp.is_empty() {
-        match tui_chat::connector::read_from_stream(con, chat_id).await {
+    let mut user_input = vec![];
+    let mut last_id = "$".to_owned();
+
+    while user_input.is_empty() {
+        match tui_chat::connector::read_from_stream(con, &session.chat_id, &last_id).await {
             Ok(keys) => {
                 for key in keys {
                     for id in key.ids {
-                        for (i, j) in id.map {
-                            if i == username {
-                                if let Ok(x) = redis::from_owned_redis_value(j) {
-                                    inp.push(serde_json::Value::String(x));
+                        last_id = id.id;
+                        for (source, msg) in id.map {
+                            if source == session.username {
+                                if let Ok(text) = redis::from_owned_redis_value(msg) {
+                                    user_input.push(serde_json::Value::String(text));
                                 }
                             }
                         }
@@ -121,4 +119,5 @@ async fn wait_for_user_input(
             Err(_) => todo!(),
         }
     }
+    session.context["user_input"] = serde_json::Value::Array(user_input);
 }

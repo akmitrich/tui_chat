@@ -1,5 +1,7 @@
-use redis::JsonAsyncCommands as _;
+use redis::JsonAsyncCommands;
 use serde_json::json;
+
+use crate::connector::write_to_stream;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Session {
@@ -28,15 +30,31 @@ impl Session {
         }
     }
 
-    pub async fn update(&self, con: &mut redis::aio::MultiplexedConnection, session_id: &str) {
+    pub async fn update_to_redis(
+        &mut self,
+        con: &mut redis::aio::MultiplexedConnection,
+        session_id: &str,
+    ) {
         let now = chrono::Local::now();
-        let _: redis::RedisResult<()> = con
-            .json_set(
-                session_id,
-                "$.timestamp",
-                &serde_json::json!(now.timestamp_millis()),
-            )
-            .await;
-        let _: redis::RedisResult<()> = con.json_set(session_id, "$.context", &self.context).await;
+        self.timestamp = now.timestamp_millis();
+        let _: redis::RedisResult<()> = con.json_set(session_id, "$", &self).await;
+    }
+
+    pub async fn send_user_output_to_redis(
+        &mut self,
+        con: &mut redis::aio::MultiplexedConnection,
+        user_output: serde_json::Value,
+    ) {
+        let output = match user_output {
+            serde_json::Value::Array(a) => a,
+            serde_json::Value::Object(o) => o.values().cloned().collect(),
+            v => vec![v],
+        };
+        for msg in output
+            .into_iter()
+            .filter_map(|v| v.as_str().map(ToOwned::to_owned))
+        {
+            write_to_stream(con, &self.chat_id, &[(self.robot.as_str(), msg.as_str())]).await;
+        }
     }
 }

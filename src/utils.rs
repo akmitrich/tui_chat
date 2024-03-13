@@ -1,4 +1,4 @@
-use redis::{JsonAsyncCommands, JsonCommands};
+use redis::JsonCommands;
 
 use crate::{connector::write_to_stream, session::Session};
 

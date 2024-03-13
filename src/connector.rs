@@ -15,12 +15,13 @@ pub enum ConnectorEvent {
 pub async fn read_from_stream(
     con: &mut redis::aio::MultiplexedConnection,
     chat_id: &str,
+    last_id: &str,
 ) -> redis::RedisResult<Vec<StreamKey>> {
     let opts = redis::streams::StreamReadOptions::default()
         .count(10)
         .block(0);
     let result: redis::streams::StreamReadReply = con
-        .xread_options(&[chat_id.to_owned()], &["$"], &opts)
+        .xread_options(&[chat_id.to_owned()], &[last_id], &opts)
         .await?;
     Ok(result.keys)
 }
@@ -54,15 +55,16 @@ pub async fn input_connector(chat_id: String, tx: mpsc::Sender<ControllerSignal>
     eprintln!("Input thread begins.");
     let mut con = create_async_redis_connection().await;
     eprintln!("Start input");
+    let mut last_id = "$".to_owned();
 
     read_old_messages(&mut con, &chat_id, tx.clone()).await;
 
     loop {
-        match read_from_stream(&mut con, &chat_id).await {
+        match read_from_stream(&mut con, &chat_id, &last_id).await {
             Ok(result) if !result.is_empty() => {
+                eprintln!("From stream {:?}", result);
                 for key in result {
-                    eprintln!("From stream {:?}", key);
-                    process_input_key(tx.clone(), key).await;
+                    process_input_key(tx.clone(), key, &mut last_id).await;
                 }
             }
             Err(e) => {
@@ -107,9 +109,14 @@ async fn read_old_messages(
     }
 }
 
-async fn process_input_key(tx: mpsc::Sender<ControllerSignal>, key: StreamKey) {
+async fn process_input_key(
+    tx: mpsc::Sender<ControllerSignal>,
+    key: StreamKey,
+    last_id: &mut String,
+) {
     for redis::streams::StreamId { id, map } in key.ids {
-        process_input_id(tx.clone(), &id, map).await
+        process_input_id(tx.clone(), &id, map).await;
+        *last_id = id;
     }
 }
 
