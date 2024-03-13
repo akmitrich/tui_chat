@@ -11,7 +11,7 @@ pub struct Session {
     pub username: String,
     pub robot: String,
     pub operator: String,
-    pub timestamp: i64,
+    pub stream_id: String,
     pub context: serde_json::Value,
 }
 
@@ -25,7 +25,7 @@ impl Session {
             username: "Customer".to_owned(),
             robot: "Robot".to_owned(),
             operator: "Operator".to_owned(),
-            timestamp: ts,
+            stream_id: "$".to_owned(),
             context: json!({}),
         }
     }
@@ -35,8 +35,6 @@ impl Session {
         con: &mut redis::aio::MultiplexedConnection,
         session_id: &str,
     ) {
-        let now = chrono::Local::now();
-        self.timestamp = now.timestamp_millis();
         let _: redis::RedisResult<()> = con.json_set(session_id, "$", &self).await;
     }
 

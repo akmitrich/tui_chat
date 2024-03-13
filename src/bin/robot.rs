@@ -98,14 +98,14 @@ async fn wait_for_user_input(
     session: &mut tui_chat::session::Session,
 ) {
     let mut user_input = vec![];
-    let mut last_id = "$".to_owned();
 
     while user_input.is_empty() {
-        match tui_chat::connector::read_from_stream(con, &session.chat_id, &last_id).await {
+        match tui_chat::connector::read_from_stream(con, &session.chat_id, &session.stream_id).await
+        {
             Ok(keys) => {
                 for key in keys {
                     for id in key.ids {
-                        last_id = id.id;
+                        session.stream_id = id.id;
                         for (source, msg) in id.map {
                             if source == session.username {
                                 if let Ok(text) = redis::from_owned_redis_value(msg) {

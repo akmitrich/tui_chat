@@ -64,7 +64,9 @@ pub async fn input_connector(chat_id: String, tx: mpsc::Sender<ControllerSignal>
             Ok(result) if !result.is_empty() => {
                 eprintln!("From stream {:?}", result);
                 for key in result {
-                    process_input_key(tx.clone(), key, &mut last_id).await;
+                    if let Some(result) = process_input_key(tx.clone(), key).await {
+                        last_id = result;
+                    }
                 }
             }
             Err(e) => {
@@ -109,15 +111,13 @@ async fn read_old_messages(
     }
 }
 
-async fn process_input_key(
-    tx: mpsc::Sender<ControllerSignal>,
-    key: StreamKey,
-    last_id: &mut String,
-) {
+async fn process_input_key(tx: mpsc::Sender<ControllerSignal>, key: StreamKey) -> Option<String> {
+    let mut last_id = None;
     for redis::streams::StreamId { id, map } in key.ids {
         process_input_id(tx.clone(), &id, map).await;
-        *last_id = id;
+        last_id = Some(id);
     }
+    last_id
 }
 
 async fn process_input_id<S: BuildHasher>(
