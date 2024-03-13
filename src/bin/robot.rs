@@ -4,16 +4,19 @@ use tui_chat::interpret::Command;
 #[tokio::main]
 async fn main() {
     let session_id = std::env::args().nth(1).unwrap();
-    let mut con = tui_chat::connector::create_async_redis_connection().await;
-    serve(&mut con, &session_id).await;
+    serve(&session_id).await;
 }
 
-async fn serve(con: &mut redis::aio::MultiplexedConnection, session_id: &str) {
+async fn serve(session_id: &str) {
+    let mut async_connection_to_redis = tui_chat::connector::create_async_redis_connection().await;
+    let con = &mut async_connection_to_redis;
     let session: redis::RedisResult<_> = con
         .json_get(session_id, "$")
         .await
         .map(|s: String| serde_json::from_str::<Vec<tui_chat::session::Session>>(&s).unwrap());
-    let mut sessions = session.unwrap();
+    let Ok(mut sessions) = session else {
+        return;
+    };
     let session = sessions.first_mut().unwrap();
     let chat_client = reqwest::Client::new();
 
